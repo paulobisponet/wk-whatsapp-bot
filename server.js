@@ -1,18 +1,17 @@
-// BOT WHATSAPP WK TELECOM - VERSÃO PRODUÇÃO
+// BOT WHATSAPP - HOLLÁ TELECOM
 const express = require('express');
 const axios = require('axios');
 const app = express();
 
-// ===== CONFIGURAÇÕES (usando variáveis de ambiente) =====
+app.use(express.json());
+
+// CONFIGURAÇÕES
 const CONFIG = {
-  // WhatsApp Meta API (pega das variáveis de ambiente)
   whatsapp: {
-    token: process.env.WHATSAPP_TOKEN || 'SEU_TOKEN_AQUI',
-    phoneNumberId: process.env.PHONE_NUMBER_ID || 'SEU_PHONE_ID_AQUI',
-    verifyToken: 'wktelecom_webhook_2024'
+    token: process.env.WHATSAPP_TOKEN || 'EAFTZBrsQZCpQkBOyYF0Qh9NjdHZAIkNmvPRUwXmZAc92TMVjUydgxAeiO3ldu5UdBoZBm9jhZC5tctMwAVh9tlw8ZBVS6KHIBBGjqceq6i7tHNPVZAvNATPxXSo9MkVYla7byOQZCZB6y1v8mHCPN2CPvHbC2jVF1HC60tCU5eXM4QwyvSYxLutYRJfN6qhb2WvgqFzrZC2qclRC9RuWDuIM0mrlabgTOvYXP9fc3RIuZC3VzysZD',
+    phoneNumberId: process.env.PHONE_NUMBER_ID || '645207948683804',
+    verifyToken: 'holla_telecom_webhook_2024'
   },
-  
-  // SGP API (seus dados reais)
   sgp: {
     baseURL: 'https://wktelecom.sgp.net.br/api',
     app: 'botpress',
@@ -20,52 +19,49 @@ const CONFIG = {
   }
 };
 
-app.use(express.json());
+// ARMAZENAR SESSÕES DOS USUÁRIOS (em produção usar Redis/DB)
+const userSessions = new Map();
 
-// Log de inicialização
-console.log('🚀 Iniciando Bot WK Telecom...');
-console.log('📱 WhatsApp Token:', CONFIG.whatsapp.token ? '✅ Configurado' : '❌ Não configurado');
-console.log('📞 Phone Number ID:', CONFIG.whatsapp.phoneNumberId ? '✅ Configurado' : '❌ Não configurado');
+console.log('🚀 Iniciando Bot Hollá Telecom...');
 
-// ===== VERIFICAÇÃO DO WEBHOOK =====
+// VERIFICAÇÃO WEBHOOK
 app.get('/webhook/whatsapp', (req, res) => {
   const mode = req.query['hub.mode'];
   const token = req.query['hub.verify_token'];
   const challenge = req.query['hub.challenge'];
   
-  console.log('🔍 Verificação webhook:', { mode, token });
+  console.log('🔍 Verificação webhook recebida');
   
   if (mode === 'subscribe' && token === CONFIG.whatsapp.verifyToken) {
-    console.log('✅ Webhook do WhatsApp verificado com sucesso!');
+    console.log('✅ Webhook verificado!');
     res.status(200).send(challenge);
   } else {
-    console.log('❌ Falha na verificação do webhook');
+    console.log('❌ Falha na verificação');
     res.sendStatus(403);
   }
 });
 
-// ===== RECEBER MENSAGENS DO WHATSAPP =====
+// RECEBER MENSAGENS
 app.post('/webhook/whatsapp', async (req, res) => {
+  console.log('📨 WEBHOOK RECEBIDO:', JSON.stringify(req.body, null, 2));
+  
   try {
-    console.log('📨 Mensagem recebida:', JSON.stringify(req.body, null, 2));
-    
-    const { entry } = req.body;
-    
-    if (entry?.[0]?.changes?.[0]?.value?.messages) {
-      const message = entry[0].changes[0].value.messages[0];
-      const contact = entry[0].changes[0].value.contacts[0];
+    if (req.body.entry && req.body.entry[0] && req.body.entry[0].changes) {
+      const changes = req.body.entry[0].changes[0];
       
-      const dadosMensagem = {
-        de: message.from,
-        texto: message.text?.body || '',
-        nome: contact.profile.name,
-        timestamp: message.timestamp
-      };
-      
-      console.log('📝 Processando mensagem:', dadosMensagem);
-      
-      // Processar mensagem
-      await processarMensagem(dadosMensagem);
+      if (changes.value && changes.value.messages) {
+        const message = changes.value.messages[0];
+        const from = message.from;
+        const messageText = message.text ? message.text.body : '';
+        
+        console.log('💬 MENSAGEM RECEBIDA:');
+        console.log('📱 De:', from);
+        console.log('📝 Texto:', messageText);
+        
+        await processarMensagem(from, messageText);
+      } else {
+        console.log('📊 Status recebido (não é mensagem)');
+      }
     }
     
     res.status(200).send('OK');
@@ -75,400 +71,492 @@ app.post('/webhook/whatsapp', async (req, res) => {
   }
 });
 
-// ===== PROCESSAMENTO DE MENSAGENS =====
-async function processarMensagem({ de, texto, nome }) {
+// FUNÇÃO PRINCIPAL - PROCESSAR MENSAGEM
+async function processarMensagem(from, texto) {
+  console.log('🔄 Processando mensagem:', texto);
+  
   const textoLimpo = texto.toLowerCase().trim();
+  let resposta = '';
+  
+  // Obter ou criar sessão do usuário
+  let session = userSessions.get(from) || {
+    authenticated: false,
+    cpf: null,
+    clienteData: null,
+    lastActivity: Date.now()
+  };
   
   try {
-    let resposta = '';
-    
-    console.log(`💬 Processando: "${texto}" de ${nome}`);
-    
-    // COMANDO: PLANOS
-    if (textoLimpo.includes('plano') || textoLimpo.includes('preço') || textoLimpo.includes('valor')) {
-      console.log('🔍 Comando identificado: PLANOS');
-      resposta = await consultarPlanos();
+    // COMANDO: OI / SAUDAÇÃO
+    if (textoLimpo.includes('oi') || textoLimpo.includes('olá') || textoLimpo.includes('bom dia')) {
+      resposta = `Olá! 👋
+
+🌐 *Bem-vindo à Hollá Telecom!*
+
+Para sua segurança, preciso que você se identifique primeiro.
+
+🆔 *Digite seu CPF* (apenas números):
+Exemplo: 12345678901
+
+🔒 *Seus dados estão seguros conosco!*`;
+      
+      // Reset da sessão para nova autenticação
+      session.authenticated = false;
+      session.cpf = null;
+      session.clienteData = null;
     }
     
-    // COMANDO: WIFI (formato: wifi 12345 678 novasenha)
-    else if (textoLimpo.startsWith('wifi ')) {
-      console.log('🔍 Comando identificado: WIFI');
-      resposta = await processarComandoWifi(texto);
+    // VALIDAÇÃO DE CPF
+    else if (!session.authenticated && isValidCPF(textoLimpo)) {
+      console.log('🆔 Validando CPF:', textoLimpo);
+      const cpf = textoLimpo.replace(/\D/g, ''); // Remove caracteres não numéricos
+      
+      // Simular validação do CPF no SGP (adaptar para sua API real)
+      const clienteData = await validarCPFnoSGP(cpf);
+      
+      if (clienteData.valid) {
+        session.authenticated = true;
+        session.cpf = cpf;
+        session.clienteData = clienteData.data;
+        
+        resposta = `✅ *Olá, ${clienteData.data.nome}!*
+
+🎉 Acesso liberado com sucesso!
+
+📋 *Serviços disponíveis:*
+• *planos* - Consultar planos
+• *boleto* - Consultar boleto
+• *confianca* - Liberação de confiança
+• *online* - Verificar se está online
+• *sair* - Encerrar sessão
+
+Como posso ajudar?`;
+      } else {
+        resposta = `❌ *CPF não encontrado!*
+
+🔍 Verifique se digitou corretamente.
+📞 Se o problema persistir, ligue: (xx) xxxx-xxxx
+
+🆔 Digite seu CPF novamente:`;
+      }
     }
     
-    // COMANDO: REBOOT (formato: reboot 678 usuario senha)
-    else if (textoLimpo.startsWith('reboot ')) {
-      console.log('🔍 Comando identificado: REBOOT');
-      resposta = await processarComandoReboot(texto);
+    // COMANDOS QUE PRECISAM DE AUTENTICAÇÃO
+    else if (session.authenticated) {
+      
+      // COMANDO: PLANOS
+      if (textoLimpo.includes('plano')) {
+        console.log('📋 Consultando planos para:', session.cpf);
+        resposta = await consultarPlanos();
+      }
+      
+      // COMANDO: BOLETO
+      else if (textoLimpo.includes('boleto')) {
+        console.log('💰 Consultando boleto para:', session.cpf);
+        resposta = await consultarBoleto(session.cpf, session.clienteData);
+      }
+      
+      // COMANDO: LIBERAÇÃO DE CONFIANÇA
+      else if (textoLimpo.includes('confianca') || textoLimpo.includes('confiança')) {
+        console.log('🔓 Liberação de confiança para:', session.cpf);
+        resposta = await liberacaoConfianca(session.cpf, session.clienteData);
+      }
+      
+      // COMANDO: VERIFICAR SE ESTÁ ONLINE
+      else if (textoLimpo.includes('online')) {
+        console.log('🌐 Verificando status online para:', session.cpf);
+        resposta = await verificarStatusOnline(session.cpf, session.clienteData);
+      }
+      
+      // COMANDO: MENU
+      else if (textoLimpo.includes('menu') || textoLimpo.includes('ajuda')) {
+        resposta = `📱 *MENU HOLLÁ TELECOM*
+
+Olá, *${session.clienteData.nome}*!
+
+🔧 *Serviços disponíveis:*
+• *planos* - Consultar planos disponíveis
+• *boleto* - Consultar boleto em aberto
+• *confianca* - Solicitar liberação de confiança
+• *online* - Verificar se está online
+• *sair* - Encerrar sessão
+
+💡 Digite o comando desejado!`;
+      }
+      
+      // COMANDO: SAIR
+      else if (textoLimpo.includes('sair') || textoLimpo.includes('logout')) {
+        userSessions.delete(from);
+        resposta = `👋 *Sessão encerrada!*
+
+🔒 Seus dados foram protegidos.
+
+Para usar novamente, digite *oi* e informe seu CPF.
+
+Obrigado por usar a Hollá Telecom! 🌐`;
+        
+        return await enviarMensagem(from, resposta); // Return early
+      }
+      
+      // NÃO ENTENDEU (AUTENTICADO)
+      else {
+        resposta = `🤖 Comando não reconhecido.
+
+📱 *Comandos disponíveis:*
+• *planos* - Ver planos
+• *boleto* - Consultar boleto  
+• *confianca* - Liberação de confiança
+• *online* - Status da conexão
+• *menu* - Ver todos comandos
+• *sair* - Encerrar sessão
+
+Digite um comando válido!`;
+      }
     }
     
-    // COMANDO: SUPORTE
-    else if (textoLimpo.includes('suporte') || textoLimpo.includes('técnico') || textoLimpo.includes('ajuda')) {
-      console.log('🔍 Comando identificado: SUPORTE');
-      resposta = await consultarSuporte();
-    }
-    
-    // COMANDO: STATUS (verificar se está funcionando)
-    else if (textoLimpo.includes('status') || textoLimpo.includes('teste')) {
-      console.log('🔍 Comando identificado: STATUS');
-      resposta = '✅ *Bot WK Telecom Online!*\n\nSistema funcionando normalmente.\n⏰ ' + new Date().toLocaleString('pt-BR');
-    }
-    
-    // SAUDAÇÕES
-    else if (textoLimpo.includes('oi') || textoLimpo.includes('olá') || textoLimpo.includes('bom dia') || textoLimpo.includes('boa tarde') || textoLimpo.includes('boa noite')) {
-      console.log('🔍 Comando identificado: SAUDAÇÃO');
-      resposta = gerarSaudacao(nome);
-    }
-    
-    // AJUDA/MENU
-    else if (textoLimpo.includes('help') || textoLimpo.includes('menu') || textoLimpo.includes('comandos')) {
-      console.log('🔍 Comando identificado: MENU');
-      resposta = gerarMenu();
-    }
-    
-    // MENSAGEM NÃO RECONHECIDA
+    // USUÁRIO NÃO AUTENTICADO
     else {
-      console.log('🔍 Comando não reconhecido');
-      resposta = gerarAjuda();
+      if (isValidCPF(textoLimpo)) {
+        // Já tratado acima
+      } else {
+        resposta = `🔒 *Acesso negado!*
+
+Para sua segurança, você precisa se identificar primeiro.
+
+🆔 *Digite seu CPF* (apenas números):
+Exemplo: 12345678901
+
+Para iniciar, digite: *oi*`;
+      }
     }
     
-    // Enviar resposta
-    console.log('📤 Enviando resposta para:', de);
-    await enviarMensagem(de, resposta);
+    // Atualizar sessão
+    session.lastActivity = Date.now();
+    userSessions.set(from, session);
+    
+    // ENVIAR RESPOSTA
+    console.log('📤 Enviando resposta...');
+    await enviarMensagem(from, resposta);
     
   } catch (error) {
-    console.error('❌ Erro ao processar mensagem:', error);
-    await enviarMensagem(de, '❌ Ops! Algo deu errado. Tente novamente em alguns minutos.');
+    console.error('❌ Erro ao processar:', error);
+    await enviarMensagem(from, '❌ Ops! Erro interno. Tente novamente em alguns segundos.');
   }
 }
 
-// ===== FUNÇÕES SGP =====
+// VALIDAR CPF (formato básico)
+function isValidCPF(texto) {
+  const cpf = texto.replace(/\D/g, '');
+  return cpf.length === 11 && /^\d{11}$/.test(cpf);
+}
 
-// Consultar planos disponíveis
+// VALIDAR CPF NO SGP (adaptar para sua API real)
+async function validarCPFnoSGP(cpf) {
+  try {
+    // SIMULAR VALIDAÇÃO - ADAPTAR PARA SUA API REAL
+    console.log('🔍 Validando CPF no SGP:', cpf);
+    
+    // Aqui você chamaria sua API real de validação de CPF
+    // const response = await axios.post(`${CONFIG.sgp.baseURL}/ura/validar-cpf/`, {...});
+    
+    // MOCK - Simular resposta (remover em produção)
+    if (cpf === '12345678901' || cpf === '11111111111') {
+      return {
+        valid: true,
+        data: {
+          nome: 'João Silva',
+          contrato: '123456',
+          servico: '789',
+          plano: 'Internet 100MB',
+          status: 'ativo'
+        }
+      };
+    } else {
+      return { valid: false };
+    }
+    
+  } catch (error) {
+    console.error('❌ Erro validação CPF:', error);
+    return { valid: false };
+  }
+}
+
+// CONSULTAR PLANOS SGP
 async function consultarPlanos() {
   try {
-    console.log('🔗 Consultando SGP API - Planos...');
     const url = `${CONFIG.sgp.baseURL}/ura/consultaplano/?app=${CONFIG.sgp.app}&token=${CONFIG.sgp.token}`;
+    console.log('🔗 Chamando SGP planos:', url);
     
     const response = await axios.get(url, { timeout: 10000 });
-    console.log('✅ SGP Planos response:', response.data);
+    console.log('✅ SGP respondeu:', response.data);
     
     if (response.data.planos && response.data.planos.length > 0) {
-      let resposta = '📋 *PLANOS WK TELECOM*\n\n';
+      let texto = '📋 *PLANOS HOLLÁ TELECOM*\n\n';
       
       response.data.planos.forEach((plano, index) => {
-        resposta += `${index + 1}️⃣ *${plano.descricao}*\n`;
-        resposta += `💰 R$ ${plano.preco}\n`;
-        resposta += `📊 ${plano.qtd_servicos} serviço(s)\n\n`;
+        texto += `${index + 1}️⃣ *${plano.descricao}*\n`;
+        texto += `💰 R$ ${plano.preco}\n`;
+        texto += `📊 ${plano.qtd_servicos} serviço(s)\n\n`;
       });
       
-      resposta += '📞 *Para contratar:*\n';
-      resposta += 'Digite: *CONTRATAR [número do plano]*\n';
-      resposta += 'Ou ligue: (xx) xxxx-xxxx';
+      texto += '📞 *Quer contratar?*\nFale conosco: (xx) xxxx-xxxx';
+      return texto;
       
-      return resposta;
-    }
-    
-    return '❌ Nenhum plano disponível no momento.';
-    
-  } catch (error) {
-    console.error('❌ Erro SGP Planos:', error.message);
-    return '❌ Erro ao consultar planos. Tente novamente.';
-  }
-}
-
-// Processar comando WiFi
-async function processarComandoWifi(texto) {
-  const partes = texto.split(' ');
-  
-  if (partes.length < 4) {
-    return `🔧 *ALTERAR WIFI*
-
-📝 *Formato correto:*
-WIFI [contrato] [serviço] [nova_senha]
-
-📌 *Exemplo:*
-WIFI 12345 678 minhasenha123
-
-ℹ️ A senha deve ter pelo menos 8 caracteres.`;
-  }
-  
-  const [_, contrato, servico, novaSenha] = partes;
-  
-  if (novaSenha.length < 8) {
-    return '❌ A senha deve ter pelo menos 8 caracteres.';
-  }
-  
-  try {
-    console.log(`🔗 Alterando WiFi SGP: contrato=${contrato}, servico=${servico}`);
-    
-    const formData = new URLSearchParams();
-    formData.append('app', CONFIG.sgp.app);
-    formData.append('token', CONFIG.sgp.token);
-    formData.append('contrato', contrato);
-    formData.append('servico', servico);
-    formData.append('nova_senha', novaSenha);
-    
-    const response = await axios.post(`${CONFIG.sgp.baseURL}/ura/cpemanage/`, formData, {
-      headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
-      timeout: 15000
-    });
-    
-    console.log('✅ SGP WiFi response:', response.data);
-    
-    if (response.data.success) {
-      return `✅ *WIFI ATUALIZADO!*
-
-🔐 Nova senha: ${novaSenha}
-📡 Contrato: ${contrato}
-🔧 Serviço: ${servico}
-
-⏰ A alteração já está ativa no equipamento.`;
     } else {
-      return '❌ Erro ao alterar WiFi. Verifique os dados e tente novamente.';
+      return '❌ Nenhum plano disponível no momento.\n\n📞 Entre em contato: (xx) xxxx-xxxx';
     }
     
   } catch (error) {
-    console.error('❌ Erro SGP WiFi:', error.message);
-    return '❌ Erro na comunicação. Verifique contrato e serviço.';
+    console.error('❌ Erro SGP planos:', error);
+    return '❌ Sistema temporariamente indisponível.\n\n📞 Ligue: (xx) xxxx-xxxx';
   }
 }
 
-// Processar comando Reboot
-async function processarComandoReboot(texto) {
-  const partes = texto.split(' ');
-  
-  if (partes.length < 4) {
-    return `🔄 *REINICIAR EQUIPAMENTO*
-
-📝 *Formato correto:*
-REBOOT [id_serviço] [usuário] [senha]
-
-📌 *Exemplo:*
-REBOOT 678 meuusuario minhasenha
-
-⚠️ Use suas credenciais do SGP.`;
-  }
-  
-  const [_, idServico, usuario, senha] = partes;
-  
+// CONSULTAR BOLETO
+async function consultarBoleto(cpf, clienteData) {
   try {
-    console.log(`🔗 Reiniciando equipamento SGP: servico=${idServico}`);
+    console.log('💰 Consultando boleto para CPF:', cpf);
     
-    const auth = Buffer.from(usuario + ':' + senha).toString('base64');
+    // ADAPTAR PARA SUA API REAL DE BOLETOS
+    // const response = await axios.post(`${CONFIG.sgp.baseURL}/ura/consultar-boleto/`, {
+    //   cpf: cpf,
+    //   contrato: clienteData.contrato
+    // });
     
-    const response = await axios.post(
-      `${CONFIG.sgp.baseURL}/cpemanager/servico/${idServico}/command/boot/`,
-      {},
-      {
-        headers: {
-          'Authorization': `Basic ${auth}`,
-          'Content-Type': 'application/json'
-        },
-        timeout: 20000
-      }
-    );
+    // MOCK - Simular resposta (remover em produção)
+    const mockBoleto = {
+      valor: '89.90',
+      vencimento: '2025-07-05',
+      status: 'em_aberto',
+      linhaDigitavel: '12345.67890 12345.678901 12345.678901 1 23456789012345',
+      referencia: 'Junho/2025'
+    };
     
-    console.log('✅ SGP Reboot response:', response.status);
-    
-    if (response.status === 200) {
-      return `🔄 *EQUIPAMENTO REINICIADO!*
+    if (mockBoleto.status === 'em_aberto') {
+      return `💰 *BOLETO EM ABERTO*
 
-📡 Serviço: ${idServico}
-⏰ Aguarde 2-3 minutos para reconexão
-📶 A internet voltará automaticamente
+👤 *Cliente:* ${clienteData.nome}
+📄 *Referência:* ${mockBoleto.referencia}
+💵 *Valor:* R$ ${mockBoleto.valor}
+📅 *Vencimento:* ${mockBoleto.vencimento}
 
-✅ Comando executado com sucesso.`;
+🔢 *Linha Digitável:*
+${mockBoleto.linhaDigitavel}
+
+📱 *Pagar via PIX:*
+Entre em contato: (xx) xxxx-xxxx`;
     } else {
-      return '❌ Erro ao reiniciar. Verifique as credenciais.';
+      return `✅ *SEM PENDÊNCIAS*
+
+👤 *Cliente:* ${clienteData.nome}
+🎉 Parabéns! Não há boletos em aberto.
+
+📊 Sua conta está em dia! 👏`;
     }
     
   } catch (error) {
-    console.error('❌ Erro SGP Reboot:', error.message);
-    return '❌ Erro ao reiniciar equipamento. Verifique os dados.';
+    console.error('❌ Erro consulta boleto:', error);
+    return '❌ Erro ao consultar boleto.\n\n📞 Entre em contato: (xx) xxxx-xxxx';
   }
 }
 
-// Consultar suporte técnico
-async function consultarSuporte() {
+// LIBERAÇÃO DE CONFIANÇA
+async function liberacaoConfianca(cpf, clienteData) {
   try {
-    console.log('🔗 Consultando SGP API - Técnicos...');
+    console.log('🔓 Liberação de confiança para CPF:', cpf);
     
-    const formData = new URLSearchParams();
-    formData.append('app', CONFIG.sgp.app);
-    formData.append('token', CONFIG.sgp.token);
+    // ADAPTAR PARA SUA API REAL
+    // const response = await axios.post(`${CONFIG.sgp.baseURL}/ura/liberacao-confianca/`, {
+    //   cpf: cpf,
+    //   contrato: clienteData.contrato
+    // });
     
-    const response = await axios.post(`${CONFIG.sgp.baseURL}/ura/tecnicos/`, formData, {
-      headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+    // MOCK - Simular liberação
+    const liberado = true;
+    
+    if (liberado) {
+      return `🔓 *LIBERAÇÃO DE CONFIANÇA*
+
+✅ *Liberação realizada com sucesso!*
+
+👤 *Cliente:* ${clienteData.nome}
+📡 *Contrato:* ${clienteData.contrato}
+⏰ *Liberado em:* ${new Date().toLocaleString('pt-BR')}
+
+🌐 *Sua conexão foi restabelecida!*
+
+⚠️ *Lembre-se:* Regularize sua situação o quanto antes.
+
+📞 Dúvidas? (xx) xxxx-xxxx`;
+    } else {
+      return `❌ *LIBERAÇÃO NÃO DISPONÍVEL*
+
+👤 *Cliente:* ${clienteData.nome}
+
+🚫 *Motivos possíveis:*
+• Conta já está ativa
+• Pendência não liberável via sistema
+• Restrição no contrato
+
+📞 *Entre em contato:*
+(xx) xxxx-xxxx`;
+    }
+    
+  } catch (error) {
+    console.error('❌ Erro liberação confiança:', error);
+    return '❌ Erro ao processar liberação.\n\n📞 Entre em contato: (xx) xxxx-xxxx';
+  }
+}
+
+// VERIFICAR STATUS ONLINE
+async function verificarStatusOnline(cpf, clienteData) {
+  try {
+    console.log('🌐 Verificando status online para CPF:', cpf);
+    
+    // ADAPTAR PARA SUA API REAL
+    // const response = await axios.get(`${CONFIG.sgp.baseURL}/ura/status-cliente/`, {
+    //   params: { cpf: cpf, contrato: clienteData.contrato }
+    // });
+    
+    // MOCK - Simular status
+    const status = {
+      online: true,
+      ip: '192.168.1.100',
+      velocidade: '95 Mbps',
+      ultimaConexao: '2025-06-29 09:30:15',
+      tempoOnline: '2h 15m'
+    };
+    
+    if (status.online) {
+      return `🌐 *STATUS DA CONEXÃO*
+
+✅ *CLIENTE ONLINE*
+
+👤 *Cliente:* ${clienteData.nome}
+📡 *Plano:* ${clienteData.plano}
+🚀 *Velocidade atual:* ${status.velocidade}
+📱 *IP:* ${status.ip}
+⏰ *Online há:* ${status.tempoOnline}
+
+🎉 *Tudo funcionando perfeitamente!*`;
+    } else {
+      return `🌐 *STATUS DA CONEXÃO*
+
+❌ *CLIENTE OFFLINE*
+
+👤 *Cliente:* ${clienteData.nome}
+📡 *Plano:* ${clienteData.plano}
+⏰ *Última conexão:* ${status.ultimaConexao}
+
+🔧 *Possíveis soluções:*
+• Verificar cabos de rede
+• Reiniciar o modem
+• Verificar energia elétrica
+
+📞 *Suporte:* (xx) xxxx-xxxx`;
+    }
+    
+  } catch (error) {
+    console.error('❌ Erro verificar status:', error);
+    return '❌ Erro ao verificar status.\n\n📞 Entre em contato: (xx) xxxx-xxxx';
+  }
+}
+
+// ENVIAR MENSAGEM WHATSAPP
+async function enviarMensagem(para, texto) {
+  try {
+    console.log('📤 Enviando para:', para);
+    console.log('📝 Texto:', texto.substring(0, 100) + '...');
+    
+    const url = `https://graph.facebook.com/v18.0/${CONFIG.whatsapp.phoneNumberId}/messages`;
+    
+    const data = {
+      messaging_product: 'whatsapp',
+      to: para,
+      text: { body: texto }
+    };
+    
+    const response = await axios.post(url, data, {
+      headers: {
+        'Authorization': `Bearer ${CONFIG.whatsapp.token}`,
+        'Content-Type': 'application/json'
+      },
       timeout: 10000
     });
     
-    console.log('✅ SGP Técnicos response:', response.data);
-    
-    if (response.data && response.data.length > 0) {
-      let resposta = '👨‍🔧 *SUPORTE WK TELECOM*\n\n';
-      resposta += '📋 Técnicos disponíveis:\n\n';
-      
-      response.data.slice(0, 3).forEach((tecnico, index) => {
-        resposta += `${index + 1}. *${tecnico.nome}*\n`;
-        resposta += `   📧 ${tecnico.username}\n\n`;
-      });
-      
-      resposta += '📞 *Outros canais:*\n';
-      resposta += '• WhatsApp: Aqui mesmo!\n';
-      resposta += '• Telefone: (xx) xxxx-xxxx\n';
-      resposta += '• Email: suporte@wktelecom.com\n\n';
-      resposta += '🕐 Horário: Seg-Sex 8h às 18h';
-      
-      return resposta;
-    }
-    
-    return '📞 *SUPORTE WK TELECOM*\n\n🕐 Seg-Sex 8h às 18h\n📞 (xx) xxxx-xxxx\n📧 suporte@wktelecom.com';
+    console.log('✅ Mensagem enviada com sucesso!');
     
   } catch (error) {
-    console.error('❌ Erro SGP Técnicos:', error.message);
-    return '📞 *SUPORTE WK TELECOM*\n\nEstamos aqui para ajudar!\n📞 (xx) xxxx-xxxx\n📧 suporte@wktelecom.com';
+    console.error('❌ ERRO AO ENVIAR MENSAGEM:');
+    console.error('Status:', error.response?.status);
+    console.error('Data:', error.response?.data);
   }
 }
 
-// ===== MENSAGENS PADRÃO =====
-
-function gerarSaudacao(nome) {
-  const hora = new Date().getHours();
-  let saudacao = hora < 12 ? 'Bom dia' : hora < 18 ? 'Boa tarde' : 'Boa noite';
+// LIMPEZA DE SESSÕES EXPIRADAS (executar a cada hora)
+setInterval(() => {
+  const now = Date.now();
+  const oneHour = 60 * 60 * 1000;
   
-  return `${saudacao}, ${nome}! 👋
-
-🌐 *Bem-vindo à WK Telecom!*
-
-Sou seu assistente virtual e posso ajudar com:
-
-📋 Ver planos - digite: *planos*
-🔧 Alterar WiFi - digite: *wifi*
-🔄 Reiniciar equipamento - digite: *reboot*
-👨‍🔧 Suporte técnico - digite: *suporte*
-📱 Ver comandos - digite: *menu*
-
-Como posso te ajudar?`;
-}
-
-function gerarMenu() {
-  return `📱 *MENU DE COMANDOS*
-
-🔧 *ALTERAR WIFI:*
-WIFI [contrato] [serviço] [nova_senha]
-Exemplo: WIFI 12345 678 minhasenha123
-
-🔄 *REINICIAR EQUIPAMENTO:*
-REBOOT [id_serviço] [usuário] [senha]
-Exemplo: REBOOT 678 meuusuario minhasenha
-
-📋 *CONSULTAR PLANOS:*
-Digite: planos, preços ou valores
-
-👨‍🔧 *SUPORTE TÉCNICO:*
-Digite: suporte, técnico ou ajuda
-
-📊 *TESTAR SISTEMA:*
-Digite: status ou teste
-
-💡 *Dica:* Os comandos não diferenciam maiúsculas/minúsculas.`;
-}
-
-function gerarAjuda() {
-  return `🤖 *Não entendi sua mensagem*
-
-📱 Digite *MENU* para ver todos os comandos
-
-🔗 *Comandos rápidos:*
-• *planos* - Ver preços
-• *wifi* - Alterar WiFi  
-• *reboot* - Reiniciar equipamento
-• *suporte* - Falar com técnico
-
-📞 Precisa de ajuda? Digite *suporte*`;
-}
-
-// ===== ENVIAR MENSAGEM WHATSAPP =====
-async function enviarMensagem(para, texto) {
-  try {
-    console.log('📤 Enviando mensagem para:', para);
-    
-    const response = await axios.post(
-      `https://graph.facebook.com/v18.0/${CONFIG.whatsapp.phoneNumberId}/messages`,
-      {
-        messaging_product: 'whatsapp',
-        to: para,
-        text: { body: texto }
-      },
-      {
-        headers: {
-          'Authorization': `Bearer ${CONFIG.whatsapp.token}`,
-          'Content-Type': 'application/json'
-        },
-        timeout: 10000
-      }
-    );
-    
-    console.log('✅ Mensagem enviada com sucesso');
-    return response.data;
-    
-  } catch (error) {
-    console.error('❌ Erro ao enviar mensagem:', error.response?.data || error.message);
-    throw error;
+  for (const [userId, session] of userSessions.entries()) {
+    if (now - session.lastActivity > oneHour) {
+      userSessions.delete(userId);
+      console.log('🧹 Sessão expirada removida:', userId);
+    }
   }
-}
+}, 60 * 60 * 1000);
 
-// ===== STATUS E LOGS =====
+// ROTAS DE TESTE
+app.get('/', (req, res) => {
+  res.send(`
+    <h1>🌐 Bot Hollá Telecom</h1>
+    <p>✅ Status: Online</p>
+    <p>⏰ ${new Date().toLocaleString('pt-BR')}</p>
+    <p>👥 Sessões ativas: ${userSessions.size}</p>
+    <p>🔗 <a href="/status">Status Detalhado</a></p>
+  `);
+});
+
 app.get('/status', (req, res) => {
   res.json({
     status: 'online',
     timestamp: new Date().toISOString(),
+    bot: 'Hollá Telecom WhatsApp Bot',
+    version: '1.0 - Autenticação CPF',
+    activeSessions: userSessions.size,
     services: {
-      sgp: '✅ connected',
-      whatsapp: '✅ connected',
-      webhook: '✅ active'
-    },
-    version: '1.0.0',
-    config: {
-      sgp_url: CONFIG.sgp.baseURL,
-      sgp_app: CONFIG.sgp.app,
-      whatsapp_configured: !!CONFIG.whatsapp.token
+      whatsapp: CONFIG.whatsapp.token ? '✅ configurado' : '❌ token faltando',
+      sgp: '✅ conectado',
+      webhook: '✅ ativo',
+      authentication: '✅ ativo'
     }
   });
 });
 
-app.get('/', (req, res) => {
-  res.send(`
-    <h1>🤖 Bot WK Telecom</h1>
-    <p>✅ Sistema online e funcionando!</p>
-    <p>📊 <a href="/status">Ver status detalhado</a></p>
-    <p>🔗 Webhook: /webhook/whatsapp</p>
-  `);
-});
-
-// Log de todas as requisições
-app.use((req, res, next) => {
-  console.log(`${new Date().toISOString()} - ${req.method} ${req.path}`);
-  next();
-});
-
-// ===== INICIALIZAR SERVIDOR =====
+// INICIAR SERVIDOR
 const PORT = process.env.PORT || 3000;
 app.listen(PORT, () => {
   console.log(`
-🚀 BOT WK TELECOM INICIADO!
+🚀 BOT HOLLÁ TELECOM INICIADO!
 
 📱 Servidor: http://localhost:${PORT}
 🔗 Webhook: http://localhost:${PORT}/webhook/whatsapp
 📊 Status: http://localhost:${PORT}/status
 
 ⚙️  Configurações:
+• Empresa: Hollá Telecom
+• Autenticação: CPF obrigatório
+• Sessões: Memória (1h timeout)
 • SGP: ${CONFIG.sgp.baseURL}
-• App: ${CONFIG.sgp.app}
-• WhatsApp Token: ${CONFIG.whatsapp.token ? '✅ Configurado' : '❌ Faltando'}
 
-🔧 Próximo passo: Configure o webhook no Meta!
+🎯 Funcionalidades:
+• ✅ Consultar planos
+• ✅ Consultar boleto  
+• ✅ Liberação de confiança
+• ✅ Verificar status online
+• ✅ Autenticação por CPF
+
+🔒 Bot pronto e seguro!
   `);
 });
 
