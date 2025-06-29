@@ -8,7 +8,7 @@ app.use(express.json());
 // CONFIGURAÇÕES
 const CONFIG = {
   whatsapp: {
-    token: process.env.WHATSAPP_TOKEN || 'EAFTZBrsQZCpQkBOyYF0Qh9NjdHZAIkNmvPRUwXmZAc92TMVjUydgxAeiO3ldu5UdBoZBm9jhZC5tctMwAVh9tlw8ZBVS6KHIBBGjqceq6i7tHNPVZAvNATPxXSo9MkVYla7byOQZCZB6y1v8mHCPN2CPvHbC2jVF1HC60tCU5eXM4QwyvSYxLutYRJfN6qhb2WvgqFzrZC2qclRC9RuWDuIM0mrlabgTOvYXP9fc3RIuZC3VzysZD',
+    token: process.env.WHATSAPP_TOKEN || 'EAFTZBrsQZCpQkBOwIAZCNoWeFmJbBZCKeHIAeTrEZAK827RYPBA3xkK66gbnOJj6V9ME9t3XOJRpnDKrZA1X5jtOgmvOgLfhqIAiWlgUzUfcCdrhmiYZAFJW0ZCiFcUp5lc3RJyEVZAUqs9hvpbSao75dEsCdHeVoVZBkyDE28eQUlgMADACzZB9WnePrZAVrJVdOgZDZD',
     phoneNumberId: process.env.PHONE_NUMBER_ID || '645207948683804',
     verifyToken: 'holla_telecom_webhook_2024'
   },
