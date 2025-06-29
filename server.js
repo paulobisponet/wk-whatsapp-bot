@@ -9,7 +9,7 @@ app.use(express.json());
 const CONFIG = {
   whatsapp: {
     token: process.env.WHATSAPP_TOKEN || 'EAFTZBrsQZCpQkBOwIAZCNoWeFmJbBZCKeHIAeTrEZAK827RYPBA3xkK66gbnOJj6V9ME9t3XOJRpnDKrZA1X5jtOgmvOgLfhqIAiWlgUzUfcCdrhmiYZAFJW0ZCiFcUp5lc3RJyEVZAUqs9hvpbSao75dEsCdHeVoVZBkyDE28eQUlgMADACzZB9WnePrZAVrJVdOgZDZD',
-    phoneNumberId: process.env.PHONE_NUMBER_ID || '645207948683804',
+    phoneNumberId: process.env.PHONE_NUMBER_ID || '703544186171468',
     verifyToken: 'holla_telecom_webhook_2024'
   },
   sgp: {
